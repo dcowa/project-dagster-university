@@ -64,3 +64,33 @@ def taxi_trips() -> None:
         max_retries=10,
     )
     conn.execute(query)
+
+
+    # src/dagster_essentials/defs/assets/trips.py
+@dg.asset(
+    deps=["taxi_zones_file"]
+)
+def taxi_zones() -> None:
+    """
+      The taxi zones csv data, loaded into a DuckDB database
+    """
+    query = f"""
+        create or replace table zones as (
+            select
+                LocationID as zone_id,
+                zone,
+                borough,
+                the_geom as geometry
+            from '{constants.TAXI_ZONES_FILE_PATH}'
+        );
+    """
+
+    conn = backoff(
+        fn=duckdb.connect,
+        retry_on=(RuntimeError, duckdb.IOException),
+        kwargs={
+            "database": os.getenv("DUCKDB_DATABASE"),
+        },
+        max_retries=10,
+    )
+    conn.execute(query)
