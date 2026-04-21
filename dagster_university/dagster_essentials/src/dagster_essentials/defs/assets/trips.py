@@ -33,7 +33,7 @@ def taxi_zones_file() -> None:
 )
 def taxi_trips(database: DuckDBResource) -> None:
     query = """
-        create or replace table taxi_trips as (
+        create or replace table trips as (
           select
             VendorID as vendor_id,
             PULocationID as pickup_zone_id,
