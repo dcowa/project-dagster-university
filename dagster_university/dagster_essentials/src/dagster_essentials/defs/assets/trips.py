@@ -1,80 +1,10 @@
-import requests
-from dagster_essentials.defs.assets import constants
 import dagster as dg
-from dagster_duckdb import DuckDBResource
-from dagster_essentials.defs.partitions import monthly_partition
+from dagster_essentials.defs.assets import constants
 
-@dg.asset(
-        partitions_def=monthly_partition
+start_date = constants.START_DATE
+end_date = constants.END_DATE
+
+weekly_partition = dg.WeeklyPartitionsDefinition(
+    start_date=start_date,
+    end_date=end_date
 )
-def taxi_trips_file(context: dg.AssetExecutionContext) -> None:
-    '''The raw parquet files for the taxi trips dataset. Sourced from the NYC Open Data portal.'''
-    partition_date_str = context.partition_key
-    month_to_fetch = partition_date_str[:-3]
-    raw_trips = requests.get(
-        f"https://d37ci6vzurychx.cloudfront.net/trip-data/yellow_tripdata_{month_to_fetch}.parquet"
-    )
-    
-
-    with open(constants.TAXI_TRIPS_TEMPLATE_FILE_PATH.format(month_to_fetch), "wb") as output_file:
-        output_file.write(raw_trips.content)
-
-@dg.asset
-def taxi_zones_file() -> None:
-    '''The raw CSV file for the taxi zones dataset. Sourced from the NYC Open Data portal.'''
-    raw_zones = requests.get(
-        "https://community-engineering-artifacts.s3.us-west-2.amazonaws.com/dagster-university/data/taxi_zones.csv"
-    )    
-
-
-    with open(constants.TAXI_ZONES_FILE_PATH, "wb") as output_file:
-        output_file.write(raw_zones.content)
-
-
-# src/dagster_essentials/defs/assets/trips.py
-@dg.asset(
-    deps=["taxi_trips_file"],
-)
-def taxi_trips(database: DuckDBResource) -> None:
-    query = """
-        create or replace table trips as (
-          select
-            VendorID as vendor_id,
-            PULocationID as pickup_zone_id,
-            DOLocationID as dropoff_zone_id,
-            RatecodeID as rate_code_id,
-            payment_type as payment_type,
-            tpep_dropoff_datetime as dropoff_datetime,
-            tpep_pickup_datetime as pickup_datetime,
-            trip_distance as trip_distance,
-            passenger_count as passenger_count,
-            total_amount as total_amount
-          from 'data/raw/taxi_trips_2023-03.parquet'
-        );
-    """
-
-    with database.get_connection() as conn:
-        conn.execute(query)
-
-
-    # src/dagster_essentials/defs/assets/trips.py
-@dg.asset(
-    deps=["taxi_zones_file"]
-)
-def taxi_zones(database: DuckDBResource) -> None:
-    """
-      The taxi zones csv data, loaded into a DuckDB database
-    """
-    query = f"""
-        create or replace table zones as (
-            select
-                LocationID as zone_id,
-                zone,
-                borough,
-                the_geom as geometry
-            from '{constants.TAXI_ZONES_FILE_PATH}'
-        );
-    """
-
-    with database.get_connection() as conn:
-        conn.execute(query)
